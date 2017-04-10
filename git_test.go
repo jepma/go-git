@@ -1,11 +1,10 @@
-package git
+package gitwrap
 
 import (
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -68,184 +67,516 @@ func commitChanges() {
 
 }
 
+func Cleanup() {
+
+	// Reset GIT to first commit
+	// git rev-list --max-parents=0 --abbrev-commit HEAD
+	exec.Command("git", "rev-list", "--max-parents=0", "--abbrev-commit", "HEAD").Run()
+
+	// Remove all tags
+	for _, element := range tags("") {
+		exec.Command("git", "tag", "-d", element).Run()
+	}
+
+	exec.Command("git", "clean", "-fd").Run()
+}
+
 func setDir() {
 	// Set current work-dir
 	os.Chdir("/Workspace/playground/demo-repo")
 }
 
-func TestHasNoChanges(t *testing.T) {
+func getDir() string {
+	dir, _ := os.Getwd()
+	return dir
+}
+
+func TestOpenRepo(t *testing.T) {
+	// Create workspace
+	setDir()
+	resetChanges()
+
+	repo, _ := CreateRepoObject(getDir())
+
+	if repo.workdir != getDir() {
+		t.Error("Expected workdir to be ", getDir())
+	}
+
+}
+
+func TestOpenRepoFail(t *testing.T) {
 
 	// Create workspace
 	setDir()
 	resetChanges()
 
-	var v bool
-	v = HasChanges()
-	if v != false {
+	_, err := CreateRepoObject("/tmp/blaat")
+	if err == nil {
+		t.Error("Expected error, got", err)
+	}
+
+}
+
+func TestHasChangesFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+
+	// Create repo object
+	repo, _ := CreateRepoObject(getDir())
+
+	// Check for changes
+	if repo.IsDirty() != false {
+		t.Error("Expected hasChanges to be false, got ", repo.IsDirty())
+	}
+
+	Cleanup()
+}
+func TestChangesTrue(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeChanges()
+	repo, _ := CreateRepoObject(getDir())
+
+	v := repo.IsDirty()
+	if v == false {
 		t.Error("Expected true, got ", v)
 	}
 
-}
+	Cleanup()
 
-func TestHasChanges(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	makeChanges()
-
-	var v bool
-	v = HasChanges()
-	if v != true {
-		t.Error("Expected false, got ", v)
-	}
-
-}
-
-func TestCheckStatusTrue(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	resetChanges()
-
-	var v bool
-	v = CheckStatus()
-	if v == true {
-		t.Error("Expected false, got ", v)
-	}
-}
-
-func TestCheckStatusFalse(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	makeChanges()
-
-	var v bool
-	v = CheckStatus()
-	if v == false {
-		t.Error("Expected false, got ", v)
-	}
 }
 
 func TestTagListEmpty(t *testing.T) {
 
 	// Create workspace
 	setDir()
-	Cleanup()
-	resetChanges()
 
 	var v []string
 
-	v = TagList("")
+	v = tags("")
 
 	if len(v) > 0 {
 		t.Error("Expected to have an empty tag list")
 	}
 
+	Cleanup()
+
 }
 
-// func TestTagListWithEntry(t *testing.T) {
-//
-// 	// Create workspace
-// 	setDir()
-// 	makeChanges()
-// 	tagChanges()
-//
-// 	var v []string
-//
-// 	v = TagList("")
-//
-// 	if len(v) > 0 {
-// 		t.Error("Expected to have an empty tag list")
-// 	}
-//
-// }
+func TestTagListWithOneEntry(t *testing.T) {
 
-func TestCreateTagFail(t *testing.T) {
-
+	// Create workspace
+	setDir()
 	makeChanges()
+	makeDummyTag("v0.0.1")
 
-	var v bool
-	v = CreateTag("", "v0.0.1")
+	var v []string
+	v = tags("")
 
-	if v != false {
-		t.Error("Expected false, got", v)
+	if len(v) > 1 {
+		t.Error("Expected to have one entry, got ", len(v), v)
 	}
 
 	Cleanup()
-	resetChanges()
 
 }
 
-func TestCreateTagFailStillChanges(t *testing.T) {
+func TestTagLatest(t *testing.T) {
 
 	// Create workspace
 	setDir()
-	resetChanges()
 	makeChanges()
+	makeDummyTag("v0.0.1")
+	makeDummyTag("v0.0.2")
 
-	var v bool
-	v = CreateTag("v0.0.0", "v0.0.1")
+	var v string
+	v = tagLatest()
 
-	if v != false {
-		t.Error("Expected false, got", v)
+	if v != "v0.0.2" {
+		t.Error("Expected to get v0.0.2, got ", v)
 	}
 
 	Cleanup()
 
 }
 
-func TestCreateTagPass(t *testing.T) {
+func TestTagExistsTrue(t *testing.T) {
 
 	// Create workspace
 	setDir()
-	commitChanges()
-
-	var v bool
-	v = CreateTag("", "v0.0.1")
-
-	if v != true {
-		t.Error("Expected true, got", v)
-	}
-
-	Cleanup()
-
-}
-
-func TestCreateTagFailTagExists(t *testing.T) {
-
-	// Create workspace
-	Cleanup()
-	setDir()
-	commitChanges()
+	makeChanges()
 	makeDummyTag("v0.0.1")
 
 	var v bool
-	v = CreateTag("v0.0.0", "v0.0.1")
+	v = tagExists("v0.0.1")
+
+	if v == false {
+		t.Error("Expected true from tagExists, got ", v)
+	}
+
+	Cleanup()
+
+}
+
+func TestTagExistsFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeChanges()
+
+	var v bool
+	v = tagExists("v0.0.1")
 
 	if v != false {
-		t.Error("Expected false, got", v)
+		t.Error("Expected false from tagExists, got ", v)
 	}
+
+	Cleanup()
+
+}
+
+func TestHasRemoteTrue(t *testing.T) {
+
+	// Create workspace
+	setDir()
+
+	// Add remote
+	exec.Command("git", "remote", "add", "origin", "git@github.com:jepma/demo-repo.git").Output()
+
+	var v bool
+	v, err := hasRemote()
+
+	if v != true {
+		t.Error("Expected true from hasRemote, got ", v)
+	}
+	if err != nil {
+		t.Error("Expected no error, got ", err)
+	}
+
+	// Delete remote
+	exec.Command("git", "remote", "remove", "origin").Output()
+
+	Cleanup()
+
+}
+
+func TestHasRemoteFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+
+	var v bool
+	v, err := hasRemote()
+
+	if v != false {
+		t.Error("Expected false from hasRemote, got", v)
+	}
+	if err != ErrNoRemote {
+		t.Error("Expected ErrNoRemote error, got ", err)
+	}
+
+	Cleanup()
 
 }
 
 func TestGetRevParse(t *testing.T) {
 
-	v, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	// Create workspace
+	setDir()
+
+	var v string
+	v, err := getRevParse()
+
+	if err != nil || v == "" {
+		t.Error("Expected string and no error from getRevParse, got", v, err)
+	}
+
+	Cleanup()
+
+}
+
+func TestDifSinceReleaseTrue(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+	commitChanges()
+	var v bool
+	v, err := diffSinceRelease("v0.0.1")
+
 	if err != nil {
-		glog.Fatal(err)
+
+		t.Error("Expected no error from diffSinceRelease, got", err)
 	}
 
-	revparse := strings.TrimSpace(string(v))
+	if v != true {
 
-	if revparse != GetRevParse() {
-		t.Errorf("Expected %s. got %s", revparse, v)
+		t.Error("Expected true from diffSinceRelease, got", v)
 	}
+
+	Cleanup()
 
 }
 
-func Cleanup() {
-	exec.Command("git", "tag", "-d", "v0.0.1").Run()
-	exec.Command("git", "tag", "-d", "v0.0.0").Run()
+func TestDifSinceReleaseFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+
+	var v bool
+	v, err := diffSinceRelease("v0.0.1")
+	if err != nil || v != false {
+		t.Error("Expected false and no error from diffSinceRelease, got", v, err)
+	}
+
+	Cleanup()
+
+}
+
+func TestDifSinceReleaseFalseTagDoesNotExist(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+
+	var v bool
+	v, err := diffSinceRelease("v1.0.0")
+
+	if err == nil {
+
+		t.Error("Expected error from diffSinceRelease, got", err)
+	}
+
+	if v != false {
+
+		t.Error("Expected false from diffSinceRelease, got", v)
+	}
+
+	Cleanup()
+
+}
+
+func TestCreateTagSuccess(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+	commitChanges()
+
+	var v bool
+	var err error
+	v, err = tagCreate("v0.0.1", "v0.0.2")
+
+	if v != true && err != nil {
+		t.Error("Expected true and no error, got", v, err)
+	}
+
+	Cleanup()
 	resetChanges()
+
 }
+
+func TestCreateTagSuccessNoPrevName(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+	commitChanges()
+
+	var v bool
+	var err error
+	v, err = tagCreate("", "v0.0.2")
+
+	if v != true && err != nil {
+		t.Error("Expected true and no error, got", v, err)
+	}
+
+	Cleanup()
+	resetChanges()
+
+}
+
+func TestCreateTagErrorAlreadyExists(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+	commitChanges()
+
+	var v bool
+	var err error
+	v, err = tagCreate("v0.0.0", "v0.0.1")
+
+	if v != false && err != ErrTagAlreadyExists {
+		t.Error("Expected true and no error, got", v, err)
+	}
+
+	Cleanup()
+	// resetChanges()
+
+}
+
+func TestCreateTagErrorDirty(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+	makeChanges()
+
+	var v bool
+	var err error
+	v, err = tagCreate("v0.0.0", "v0.0.1")
+
+	if v != false && err != ErrTagCreateDirty {
+		t.Error("Expected false and ErrTagCreateDirty error, got", v, err)
+	}
+
+	Cleanup()
+	resetChanges()
+
+}
+
+func TestCreateTagErrTagCreateNoChanges(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	var v bool
+	var err error
+	v, err = tagCreate("v0.0.0", "v0.0.1")
+
+	if v != false {
+		t.Error("Expected false, got", v)
+	}
+
+	if err != ErrTagCreateNoChanges {
+		t.Error("Expected ErrTagCreateNoChanges, got", err)
+	}
+
+	Cleanup()
+	// resetChanges()
+
+}
+
+func TestCreateTagErrTagCreateFalseName(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	var v bool
+	var err error
+	v, err = tagCreate("v0.0.0", "!#!@$$")
+
+	if v != false {
+		t.Error("Expected false, got", v)
+	}
+
+	if err != ErrTagCreateNoChanges {
+		t.Error("Expected ErrTagCreateNoChanges, got", err)
+	}
+
+	Cleanup()
+	// resetChanges()
+
+}
+
+func TestPushSuccess(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	v, err := pushRemote()
+
+	if v != true {
+		t.Error("Expected true, got", v)
+	}
+
+	if err != nil {
+		t.Error("Expected nil, got", err)
+	}
+
+	Cleanup()
+	// resetChanges()
+
+}
+
+//
+// func TestCreateTagFailStillChanges(t *testing.T) {
+//
+// 	// Create workspace
+// 	setDir()
+// 	resetChanges()
+// 	makeChanges()
+//
+// 	var v bool
+// 	v = CreateTag("v0.0.0", "v0.0.1")
+//
+// 	if v != false {
+// 		t.Error("Expected false, got", v)
+// 	}
+//
+// 	Cleanup()
+//
+// }
+//
+// func TestCreateTagPass(t *testing.T) {
+//
+// 	// Create workspace
+// 	setDir()
+// 	commitChanges()
+//
+// 	var v bool
+// 	v = CreateTag("", "v0.0.1")
+//
+// 	if v != true {
+// 		t.Error("Expected true, got", v)
+// 	}
+//
+// 	Cleanup()
+//
+// }
+//
+// func TestCreateTagFailTagExists(t *testing.T) {
+//
+// 	// Create workspace
+// 	Cleanup()
+// 	setDir()
+// 	commitChanges()
+// 	makeDummyTag("v0.0.1")
+//
+// 	var v bool
+// 	v = CreateTag("v0.0.0", "v0.0.1")
+//
+// 	if v != false {
+// 		t.Error("Expected false, got", v)
+// 	}
+//
+// }
+//
+// func TestGetRevParse(t *testing.T) {
+//
+// 	v, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+// 	if err != nil {
+// 		glog.Fatal(err)
+// 	}
+//
+// 	revparse := strings.TrimSpace(string(v))
+//
+// 	if revparse != GetRevParse() {
+// 		t.Errorf("Expected %s. got %s", revparse, v)
+// 	}
+//
+// }
+//
