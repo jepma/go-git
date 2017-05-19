@@ -5,6 +5,7 @@ package gitwrap
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -76,13 +77,18 @@ func tags(searchTag string) (tags []string) {
 }
 
 // GetTagLatest gets the latest tag from GIT. If no tag exists, it will return ""
-func tagLatest() (tag string) {
+func tagLatest(tagPrefix string) (tag string, err error) {
 
 	// Get tags (default string = v*)
-	tags := tags("v*")
-	tag = tags[0]
+	// tags := tags("v*")
+	tags := tags(fmt.Sprintf("%s*", tagPrefix))
 
-	return tag
+	// Check if we have actual results
+	if len(tags) == 0 {
+		return tag, ErrTagEmpty
+	}
+
+	return tags[0], nil
 }
 
 // TagExists will verify if the tag already exists
@@ -99,56 +105,19 @@ func tagExists(tag string) (status bool) {
 	return false
 }
 
-func tagCreate(previouseTagName string, newTagName string) (status bool, err error) {
-
-	// We cannot create a tag if we have changes pending;
-	if isDirty() == true {
-		// glog.Error("Changes have been found, please commit first.")
-		// glog.Error("@TODO: Ask if we have to commit the files")
-		return false, ErrTagCreateDirty
-	}
-
-	// If we have no valid previouseTagName present, we will fetch the latest from GIT
-	if previouseTagName == "" {
-		previouseTagName = tagLatest()
-	}
-
-	// If we have tags but did not bother to provide tag in command, error!
-	if len(tags("")) > 0 && previouseTagName == "" {
-		return false, ErrTagCreateNoPrevious
-	}
-
-	// Verify if we have changes since last tag
-	if previouseTagName != "" {
-		diff, _ := diffSinceRelease(previouseTagName)
-		if diff == false {
-			// glog.Error("No changes since latest release have been found, TAG aborted")
-			return false, ErrTagCreateNoChanges
-		}
-	}
-
-	// Validate if tag already exists, for some reason.
-	if tagExists(newTagName) == true {
-		// fmt.Printf("Tag already exists in GIT: %s \n", newTagName)
-		// glog.Error("Tag already exists in GIT: ", newTagName)
-		return false, ErrTagAlreadyExists
-	}
+func tagCreate(newTagName string, message string) (status bool, err error) {
 
 	// git tag $(TAG)
-	output, err := exec.Command("git", "tag", newTagName).Output()
+	output, err := exec.Command("git", "tag", newTagName).CombinedOutput()
+
 	if err != nil {
-		glog.Errorf("Error: %s", err)
-		return false, err
+		glog.Errorf("Error: %s", output)
+		return false, ErrTagCreating
 	}
 
 	if string(output) != "" {
 		glog.Errorf("Output: %s", string(output))
 		return false, err
-	}
-
-	// Check if we have a remote
-	if remote, _ := hasRemote(); remote == true {
-		// push()
 	}
 
 	return true, err
@@ -171,7 +140,35 @@ func hasRemote() (status bool, err error) {
 
 func pushRemote() (status bool, err error) {
 
+	// Check if we have upstream
+	if statRemote, errRemote := hasRemote(); statRemote == false {
+		return false, errRemote
+	}
+
 	output, err := exec.Command("git", "push", "--tags").Output()
+	if err != nil {
+		glog.Error(err)
+		return false, err
+	}
+
+	if string(output) == "Everything up-to-date" {
+		status = true
+	} else {
+		status = false
+	}
+
+	return status, err
+}
+
+// Pull remote repo
+func pullRemote() (status bool, err error) {
+
+	// Check if we have upstream
+	if statRemote, errRemote := hasRemote(); statRemote == false {
+		return false, errRemote
+	}
+
+	output, err := exec.Command("git", "pull", "--tags").Output()
 	if err != nil {
 		glog.Error(err)
 		return false, err

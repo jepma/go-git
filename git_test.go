@@ -46,6 +46,13 @@ func makeDummyTag(tag string) {
 
 }
 
+func addRemote() {
+	err := exec.Command("git", "remote", "add", "origin", "git@github.com:jepma/demo-repo.git").Run()
+	if err != nil {
+		glog.Fatal("Error: ", err)
+	}
+}
+
 func commitChanges() {
 
 	resetChanges()
@@ -192,10 +199,14 @@ func TestTagLatest(t *testing.T) {
 	makeDummyTag("v0.0.2")
 
 	var v string
-	v = tagLatest()
+	v, err := tagLatest("v")
 
 	if v != "v0.0.2" {
 		t.Error("Expected to get v0.0.2, got ", v)
+	}
+
+	if err != nil {
+		t.Error("Expected err to be nil, got", err)
 	}
 
 	Cleanup()
@@ -372,28 +383,7 @@ func TestCreateTagSuccess(t *testing.T) {
 
 	var v bool
 	var err error
-	v, err = tagCreate("v0.0.1", "v0.0.2")
-
-	if v != true && err != nil {
-		t.Error("Expected true and no error, got", v, err)
-	}
-
-	Cleanup()
-	resetChanges()
-
-}
-
-func TestCreateTagSuccessNoPrevName(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	makeDummyTag("v0.0.1")
-	makeChanges()
-	commitChanges()
-
-	var v bool
-	var err error
-	v, err = tagCreate("", "v0.0.2")
+	v, err = tagCreate("v0.0.2", "")
 
 	if v != true && err != nil {
 		t.Error("Expected true and no error, got", v, err)
@@ -414,53 +404,10 @@ func TestCreateTagErrorAlreadyExists(t *testing.T) {
 
 	var v bool
 	var err error
-	v, err = tagCreate("v0.0.0", "v0.0.1")
+	v, err = tagCreate("v0.0.1", "")
 
 	if v != false && err != ErrTagAlreadyExists {
 		t.Error("Expected true and no error, got", v, err)
-	}
-
-	Cleanup()
-	// resetChanges()
-
-}
-
-func TestCreateTagErrorDirty(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	makeDummyTag("v0.0.1")
-	makeChanges()
-
-	var v bool
-	var err error
-	v, err = tagCreate("v0.0.0", "v0.0.1")
-
-	if v != false && err != ErrTagCreateDirty {
-		t.Error("Expected false and ErrTagCreateDirty error, got", v, err)
-	}
-
-	Cleanup()
-	resetChanges()
-
-}
-
-func TestCreateTagErrTagCreateNoChanges(t *testing.T) {
-
-	// Create workspace
-	setDir()
-	makeDummyTag("v0.0.1")
-
-	var v bool
-	var err error
-	v, err = tagCreate("v0.0.0", "v0.0.1")
-
-	if v != false {
-		t.Error("Expected false, got", v)
-	}
-
-	if err != ErrTagCreateNoChanges {
-		t.Error("Expected ErrTagCreateNoChanges, got", err)
 	}
 
 	Cleanup()
@@ -476,7 +423,7 @@ func TestCreateTagErrTagCreateFalseName(t *testing.T) {
 
 	var v bool
 	var err error
-	v, err = tagCreate("v0.0.0", "!#!@$$")
+	v, err = tagCreate("!#!@$$", "")
 
 	if v != false {
 		t.Error("Expected false, got", v)
@@ -491,11 +438,17 @@ func TestCreateTagErrTagCreateFalseName(t *testing.T) {
 
 }
 
-func TestPushSuccess(t *testing.T) {
+/*
+	Will not do this now, slows down testing.
+*/
+func DisabledTestPushTrue(t *testing.T) {
 
 	// Create workspace
 	setDir()
 	makeDummyTag("v0.0.1")
+
+	// Add remote
+	exec.Command("git", "remote", "add", "origin", "git@github.com:jepma/demo-repo.git").Output()
 
 	v, err := pushRemote()
 
@@ -508,7 +461,78 @@ func TestPushSuccess(t *testing.T) {
 	}
 
 	Cleanup()
-	// resetChanges()
+
+	// Delete remote
+	exec.Command("git", "remote", "remove", "origin").Output()
+
+}
+
+func TestPushFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	v, err := pushRemote()
+
+	if v != false {
+		t.Error("Expected false, got", v)
+	}
+
+	if err != ErrNoRemote {
+		t.Error("Expected ErrNoRemote, got", err)
+	}
+
+	Cleanup()
+
+}
+
+/*
+	Will not do this now, slows down testing.
+*/
+func DisabledTestPullTrue(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	// Add remote
+	exec.Command("git", "remote", "add", "origin", "git@github.com:jepma/demo-repo.git").Output()
+
+	v, err := pushRemote()
+
+	if v != true {
+		t.Error("Expected true, got", v)
+	}
+
+	if err != nil {
+		t.Error("Expected nil, got", err)
+	}
+
+	Cleanup()
+
+	// Delete remote
+	exec.Command("git", "remote", "remove", "origin").Output()
+
+}
+
+func TestPullFalse(t *testing.T) {
+
+	// Create workspace
+	setDir()
+	makeDummyTag("v0.0.1")
+
+	v, err := pullRemote()
+
+	if v != false {
+		t.Error("Expected false, got", v)
+	}
+
+	if err != ErrNoRemote {
+		t.Error("Expected ErrNoRemote, got", err)
+	}
+
+	Cleanup()
 
 }
 

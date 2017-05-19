@@ -13,6 +13,8 @@ var (
 	ErrTagCreateDirty      = errors.New("GIT: Repository is still dirty, please add and commit changes")
 	ErrTagCreateNoChanges  = errors.New("GIT: No changes since latest tag")
 	ErrTagAlreadyExists    = errors.New("GIT: Tag already exists")
+	ErrTagCreating         = errors.New("GIT: Error creating tag")
+	ErrTagEmpty            = errors.New("GIT: Did not find any tags matching your query")
 	ErrDiff                = errors.New("GIT: Error while verifying git diff")
 	ErrNoRemote            = errors.New("GIT: Did not find remote stream")
 )

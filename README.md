@@ -8,6 +8,8 @@ This nifty little wrapper uses the regular git package.
 
 ## Example
 
-```go
+Create struct with a default directory set.
 
+```go
+repo, _ := CreateRepoObject("/path/to/repo")
 ```

@@ -45,6 +45,16 @@ func (v *Repo) Pull() {
 }
 
 // TagCreate retrieves latest state from remote
-func (v *Repo) TagCreate(previouseTagName string, newTagName string) (status bool, err error) {
-	return tagCreate(previouseTagName, newTagName)
+func (v *Repo) TagCreate(newTagName string, message string) (status bool, err error) {
+	return tagCreate(newTagName, message)
+}
+
+// TagLatest retrieves latest tag from Repo
+func (v *Repo) TagLatest(tagPrefix string) (tag string, err error) {
+	return tagLatest(tagPrefix)
+}
+
+// TagExists retrieves latest tag from Repo
+func (v *Repo) TagExists(tag string) bool {
+	return tagExists(tag)
 }
